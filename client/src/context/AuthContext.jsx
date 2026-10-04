@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { authApi, getToken, setToken, clearToken } from '../api/client';
+import { authApi, getToken, setToken, clearToken, UNAUTHORIZED_EVENT } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -10,6 +10,14 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     clearToken();
     setUser(null);
+  }, []);
+
+  // A rejected token (expired or revoked mid-session) is reported by the API
+  // client. Clear the session so the route guard sends the user to /login.
+  useEffect(() => {
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
 
   // Restore the session on a page reload.

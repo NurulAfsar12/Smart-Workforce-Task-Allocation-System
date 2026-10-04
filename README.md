@@ -60,6 +60,8 @@ Tasks move through `PENDING → ASSIGNED → IN_PROGRESS → REVIEW → COMPLETE
 
 ## Documentation
 
+- [Project Report](docs/Smart-Workforce-Project-Report.docx) — full written report (29 pages): requirements, database design, allocation algorithm, concurrency strategy, testing and reflection
+- [Presentation Deck](docs/Smart-Workforce-Presentation.pptx) — 18 slides covering architecture, the allocation engine, triggers, views and the demo run sheet
 - [Entity Relationship Diagram](docs/ERD.md) — auto-generated from the live schema (`server/scripts/generateErd.mjs`)
 - [Postman Collection](docs/SmartWorkforce.postman_collection.json) — import into Postman, set `{{baseUrl}}` and `{{token}}` (acquired from the Login request)
 
@@ -71,6 +73,13 @@ cd server
 node scripts/testApi.js
 ```
 Expected: `passed: 62   failed: 0`.
+
+### Session expiry regression (401 interceptor)
+```bash
+cd client
+npm run test:auth
+```
+Asserts that a valid request keeps the token, that a 401 from a protected endpoint clears it and raises one notification, and that a failed login raises none.
 
 ### Production build
 ```bash

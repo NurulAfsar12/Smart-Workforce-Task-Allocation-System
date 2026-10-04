@@ -1,5 +1,10 @@
 const TOKEN_KEY = 'sw_token';
 
+// Fired when the server rejects our token (expired or revoked). AuthProvider
+// listens for this and drops the session, so the <Protected> route guard
+// redirects to /login instead of the page rendering an error state.
+export const UNAUTHORIZED_EVENT = 'sw:unauthorized';
+
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
@@ -37,6 +42,14 @@ async function request(path, { method = 'GET', body, params } = {}) {
   }
 
   if (!res.ok) {
+    // A rejected token must never stay in storage. The auth endpoints manage
+    // their own session state, so they are excluded to avoid a redirect loop
+    // when someone simply types the wrong password.
+    if (res.status === 401 && token && !path.startsWith('/api/auth/')) {
+      clearToken();
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    }
+
     const error = new Error(payload.message || `Request failed with status ${res.status}`);
     error.status = res.status;
     error.details = payload.details;

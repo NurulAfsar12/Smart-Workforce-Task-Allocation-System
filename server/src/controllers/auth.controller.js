@@ -18,7 +18,9 @@ const register = asyncHandler(async (req, res) => {
 
 /** GET /api/auth/me */
 const me = asyncHandler(async (req, res) => {
-  res.json({ success: true, user: req.user });
+  // buildUser() (not the raw req.user row) so this returns the same shape as
+  // /auth/login - the client reads user.employee.employee_id from both.
+  res.json({ success: true, user: await authService.buildUser(req.user) });
 });
 
 /** POST /api/auth/change-password */

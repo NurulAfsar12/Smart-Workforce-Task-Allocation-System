@@ -4,8 +4,12 @@ const db = require('../config/db');
 const env = require('../config/env');
 const ApiError = require('../utils/ApiError');
 
-/** Shape returned to the client after a successful login. */
-async function buildSession(user) {
+/**
+ * The canonical user object sent to the client.
+ * Both /auth/login and /auth/me must return this exact shape, otherwise the
+ * client loses the nested `employee` object it reads employee_id from.
+ */
+async function buildUser(user) {
   const employee = user.employee_id
     ? await db.queryOne(
         `SELECT e.employee_id, e.employee_code, e.job_title, e.department_id, d.name AS department_name
@@ -16,22 +20,24 @@ async function buildSession(user) {
       )
     : null;
 
+  return {
+    user_id: user.user_id,
+    email: user.email,
+    full_name: user.full_name,
+    role: user.role,
+    employee,
+  };
+}
+
+/** Shape returned to the client after a successful login. */
+async function buildSession(user) {
   const token = jwt.sign(
     { sub: user.user_id, role: user.role, email: user.email },
     env.jwt.secret,
     { expiresIn: env.jwt.expiresIn }
   );
 
-  return {
-    token,
-    user: {
-      user_id: user.user_id,
-      email: user.email,
-      full_name: user.full_name,
-      role: user.role,
-      employee,
-    },
-  };
+  return { token, user: await buildUser(user) };
 }
 
 async function login({ email, password }) {
@@ -82,4 +88,4 @@ async function changePassword({ user_id, current_password, new_password }) {
   return { success: true, message: 'Password updated' };
 }
 
-module.exports = { login, registerEmployee, changePassword, buildSession };
+module.exports = { login, registerEmployee, changePassword, buildSession, buildUser };

@@ -312,7 +312,6 @@ function ProjectModal({ project, departments, onClose, onSaved, onError }) {
       else await projectsApi.update(project.project_id, body);
       onSaved(form.name);
       setForm(EMPTY);
-      setLoadedId(null);
     } catch (err) {
       onError(err.message);
     } finally {
