@@ -27,8 +27,8 @@ async function ensureDatabase() {
   const admin = new Client({
     host: env.db.host,
     port: env.db.port,
-    user: env.db.user,
-    password: env.db.password,
+    user: env.dbAdmin.user,
+    password: env.dbAdmin.password,
     database: 'postgres',
   });
 
@@ -58,8 +58,8 @@ async function run() {
   const client = new Client({
     host: env.db.host,
     port: env.db.port,
-    user: env.db.user,
-    password: env.db.password,
+    user: env.dbAdmin.user,
+    password: env.dbAdmin.password,
     database: env.db.database,
   });
   await client.connect();

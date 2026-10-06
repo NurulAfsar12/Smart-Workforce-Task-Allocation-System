@@ -36,7 +36,7 @@ router.put('/:id', requireRole('ADMIN'), controller.update);
 router.delete('/:id', requireRole('ADMIN'), controller.remove);
 
 // --- allocation ---
-router.post('/:id/allocate', controller.allocate);
+router.post('/:id/allocate', requireRole('ADMIN'), controller.allocate);
 router.post(
   '/:id/assign',
   requireRole('ADMIN'),
@@ -46,6 +46,8 @@ router.post(
 router.post('/:id/release', requireRole('ADMIN'), controller.release);
 
 // --- workflow ---
+// Not ADMIN-only: an assignee must be able to move their own task forward.
+// The controller enforces ownership - see task.controller.transition.
 router.post(
   '/:id/transition',
   validate({ status: { required: true, type: 'enum', values: TASK_STATUSES } }),

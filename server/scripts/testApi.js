@@ -312,7 +312,96 @@ function section(title) {
   const missingRoute = await api('GET', '/api/does-not-exist');
   check('unknown route returns 404', missingRoute.status === 404);
 
+  // -------------------------------------------------------------------------
+  // Regression tests for two privilege-escalation holes found by security
+  // review. Both previously returned success to an ordinary EMPLOYEE.
+  // -------------------------------------------------------------------------
+  section('11. Security regression (privilege escalation)');
+  token = login.body.token;
+  const secTask = await api('POST', '/api/tasks', {
+    project_id: projects.body.data[0].project_id,
+    title: 'E2E SECURITY PROBE',
+    estimated_hours: 1,
+    priority: 'LOW',
+  });
+  const secTaskId = secTask.body.task_id || secTask.body.data?.task_id;
+
+  token = employeeLogin.body.token;
+
+  // Hole 1: POST /api/tasks/:id/allocate had no requireRole('ADMIN').
+  const escalateAllocate = await api('POST', `/api/tasks/${secTaskId}/allocate`, {});
+  check('employee cannot run auto-allocation', escalateAllocate.status === 403,
+    `got ${escalateAllocate.status} - this endpoint must be ADMIN only`);
+  const stillPending = await (async () => {
+    token = login.body.token;
+    const r = await api('GET', `/api/tasks/${secTaskId}`);
+    return r.body.data?.status;
+  })();
+  check('task was NOT allocated by the employee', stillPending === 'PENDING',
+    `status is ${stillPending}`);
+
+  // Hole 2: POST /api/tasks/:id/transition had no ownership check, so any
+  // employee could advance or close a colleague's task.
+  const otherTask = await (async () => {
+    token = login.body.token;
+    const list = await api('GET', '/api/tasks?status=IN_PROGRESS');
+    return list.body.data?.find((t) => t.assigned_employee_id);
+  })();
+
+  if (otherTask) {
+    token = employeeLogin.body.token;
+    const selfEmployeeId = employeeLogin.body.user?.employee?.employee_id;
+    const isOwn = otherTask.assigned_employee_id === selfEmployeeId;
+
+    const escalateTransition = await api('POST', `/api/tasks/${otherTask.task_id}/transition`, {
+      status: 'REVIEW',
+    });
+    if (isOwn) {
+      check('assignee may advance their own task', escalateTransition.status === 200,
+        `got ${escalateTransition.status}`);
+    } else {
+      check('employee cannot transition a colleague\'s task', escalateTransition.status === 403,
+        `got ${escalateTransition.status} - ownership must be enforced`);
+
+      const escalateComplete = await api('POST', `/api/tasks/${otherTask.task_id}/transition`, {
+        status: 'COMPLETED',
+      });
+      check('employee cannot complete a colleague\'s task', escalateComplete.status === 403,
+        `got ${escalateComplete.status}`);
+
+      const escalateCancel = await api('POST', `/api/tasks/${otherTask.task_id}/transition`, {
+        status: 'CANCELLED',
+      });
+      check('employee cannot cancel a colleague\'s task', escalateCancel.status === 403,
+        `got ${escalateCancel.status}`);
+    }
+  } else {
+    console.log('  SKIP  no IN_PROGRESS task available for the ownership checks');
+  }
+
+  // An unassigned task must not be transitionable by an employee either.
+  const escalateUnassigned = await api('POST', `/api/tasks/${secTaskId}/transition`, {
+    status: 'IN_PROGRESS',
+  });
+  check('employee cannot transition an unassigned task', escalateUnassigned.status === 403,
+    `got ${escalateUnassigned.status}`);
+
+  token = login.body.token;
+  const adminTransitions = await api('POST', `/api/tasks/${secTaskId}/transition`, { status: 'ON_HOLD' });
+  check('admin may still transition any task', adminTransitions.status === 200,
+    `got ${adminTransitions.status}`);
+
+  // Response hardening.
+  const health = await fetch(`${BASE}/health`);
+  check('X-Powered-By header is not advertised', !health.headers.get('x-powered-by'));
+  check('security headers are present (nosniff)',
+    health.headers.get('x-content-type-options') === 'nosniff');
+  check('security headers are present (frame denial)',
+    health.headers.get('x-frame-options') !== null);
+
   section('Cleanup');
+  const delSec = await api('DELETE', `/api/tasks/${secTaskId}`);
+  check('security probe task deleted', delSec.status === 200);
   const del1 = await api('DELETE', `/api/tasks/${taskId}`);
   check('test task deleted', del1.status === 200);
   const del2 = await api('DELETE', `/api/tasks/${rel2Id}`);

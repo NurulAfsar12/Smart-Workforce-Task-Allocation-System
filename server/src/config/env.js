@@ -22,4 +22,11 @@ module.exports = {
     password: process.env.DB_PASSWORD || 'postgres',
     database: process.env.DB_NAME || 'smart_workforce',
   },
+  // Separate, more powerful credentials used ONLY by the installer scripts.
+  // The running application never uses these, so a compromised API process
+  // cannot create or drop schema objects.
+  dbAdmin: {
+    user: process.env.DB_ADMIN_USER || process.env.DB_USER || 'postgres',
+    password: process.env.DB_ADMIN_PASSWORD || process.env.DB_PASSWORD || 'postgres',
+  },
 };

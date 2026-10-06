@@ -40,6 +40,17 @@ async function buildSession(user) {
   return { token, user: await buildUser(user) };
 }
 
+/**
+ * A genuine bcrypt hash of a value nobody knows, used purely to equalise
+ * response time when the submitted email does not exist.
+ *
+ * This MUST be a syntactically valid bcrypt hash. An earlier placeholder
+ * string was not valid, so bcrypt.compare short-circuited in ~0.1 ms against
+ * ~147 ms for a real hash - a 626x gap that made registered emails
+ * enumerable by timing despite the intended mitigation.
+ */
+const DUMMY_HASH = '$2a$10$woPEglzJb9CH2Pn8RFtgK.x985sEZ56hwHzC.h2CI7dhCLTlNgAoy';
+
 async function login({ email, password }) {
   const user = await db.queryOne(
     `SELECT user_id, email, password_hash, full_name, role, employee_id, is_active
@@ -48,9 +59,9 @@ async function login({ email, password }) {
     [email]
   );
 
-  // Compare against a dummy hash when the user does not exist so the
-  // response time does not reveal whether the email is registered.
-  const hash = user?.password_hash || '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidinv';
+  // Always run a bcrypt comparison, even for an unknown email, so the
+  // response time does not reveal whether the address is registered.
+  const hash = user?.password_hash || DUMMY_HASH;
   const matches = await bcrypt.compare(password, hash);
 
   if (!user || !matches) throw ApiError.unauthorized('Invalid email or password');

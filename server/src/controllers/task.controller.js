@@ -237,11 +237,37 @@ const release = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Assignment released, task is PENDING again', data: task });
 });
 
+/**
+ * Statuses the current assignee may move a task to on their own initiative.
+ * PENDING is excluded because returning a task to the pool releases the
+ * assignment, which is an administrative act (POST /:id/release). CANCELLED
+ * is excluded because cancelling kills other people's plans.
+ */
+const SELF_SERVICE_STATUSES = ['IN_PROGRESS', 'REVIEW', 'COMPLETED', 'ON_HOLD'];
+
 /** POST /api/tasks/:id/transition - move through the workflow */
 const transition = asyncHandler(async (req, res) => {
   const { status, remarks } = req.body;
   if (!TASK_STATUSES.includes(status)) {
     throw ApiError.badRequest(`status must be one of: ${TASK_STATUSES.join(', ')}`);
+  }
+
+  // Authorisation: an admin may drive any task; anyone else may only drive a
+  // task assigned to them, and only into a self-service status. Without this
+  // any employee could close a colleague's task and corrupt the workload and
+  // performance reports that read from task_history.
+  if (req.user.role !== 'ADMIN') {
+    const current = await db.queryOne(
+      'SELECT task_id, assigned_employee_id FROM tasks WHERE task_id = $1',
+      [req.params.id]
+    );
+    if (!current) throw ApiError.notFound(`Task ${req.params.id} not found`);
+    if (current.assigned_employee_id !== req.user.employee_id) {
+      throw ApiError.forbidden('You can only change the status of tasks assigned to you');
+    }
+    if (!SELF_SERVICE_STATUSES.includes(status)) {
+      throw ApiError.forbidden(`Only an administrator may move a task to ${status}`);
+    }
   }
 
   const task = await allocationService.transition(req.params.id, status, {

@@ -1,12 +1,14 @@
 const express = require('express');
 const validate = require('../middleware/validate');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { authLimiter } = require('../middleware/rateLimit');
 const controller = require('../controllers/auth.controller');
 
 const router = express.Router();
 
 router.post(
   '/login',
+  authLimiter,
   validate({
     email: { required: true, type: 'email' },
     // No length rule here: a wrong password must reach the auth service and
@@ -19,6 +21,9 @@ router.post(
 router.post(
   '/register',
   requireRole('ADMIN'),
+  // Creating a user is a privileged, infrequent action, so it shares the
+  // credential-endpoint throttle.
+  authLimiter,
   validate({
     email: { required: true, type: 'email' },
     password: { required: true, type: 'string', minLength: 8 },
